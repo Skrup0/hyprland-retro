@@ -1,0 +1,11 @@
+[Desktop Entry]
+Encoding=UTF-8
+Name=Chicago95-vesper
+Type=X-GNOME-Metatheme
+
+[X-GNOME-Metatheme]
+GtkTheme=Chicago95-vesper
+MetacityTheme=Chicago95-vesper
+IconTheme=Chicago95
+CursorTheme=Chicago95_Cursor_White
+CursorSize=32

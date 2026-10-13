@@ -1,0 +1,180 @@
+diff --git a/hyprbars/Makefile b/hyprbars/Makefile
+index 59c7a93..7216904 100644
+--- a/hyprbars/Makefile
++++ b/hyprbars/Makefile
+@@ -6,7 +6,7 @@ else
+ endif
+ 
+ CXXFLAGS ?= -O2
+-CXXFLAGS += -shared -fPIC -std=c++2b -Wno-c++11-narrowing
++CXXFLAGS += -shared -fPIC -std=c++2b -Wno-c++11-narrowing -I/usr/include/lua
+ INCLUDES = `pkg-config --cflags pixman-1 libdrm hyprland libinput libudev wayland-server xkbcommon`
+ LIBS =
+ 
+diff --git a/hyprbars/barDeco.cpp b/hyprbars/barDeco.cpp
+index 993c8f3..36a9c58 100644
+--- a/hyprbars/barDeco.cpp
++++ b/hyprbars/barDeco.cpp
+@@ -31,6 +31,36 @@
+ 
+ using namespace Render::GL;
+ 
++// Mac Platinum - light
++// #define gripLight 0xffffffffU
++// #define bevelHighlight 0xffeeeeeeU
++// #define bevelLight 0xffffffffU
++// #define bevelDark 0xff999999U
++// #define bevelShadow 0xff555555U
++
++// Mac Platinum - dark
++// #define gripLight 0xff707070U
++// #define bevelHighlight 0xff5a5a5aU
++// #define bevelLight 0xff707070U
++// #define bevelDark 0xff262626U
++// #define bevelShadow 0xff111111U
++
++// Vesper - dark
++#define gripLight 0xff505050U
++#define bevelHighlight 0xff343434U
++#define bevelLight 0xff505050U
++#define bevelDark 0xff101010U
++#define bevelShadow 0xff000000U
++
++// windows 98 - light
++// #define gripLight 0xffffffffu
++// #define bevelHighlight 0xffdfdfdfu
++// #define bevelLight 0xffffffffu
++// #define bevelDark 0xff808080u
++// #define bevelShadow 0xff000000u
++
++#define buttonHover bevelLight
++
+ static CHyprColor configColor(Config::INTEGER color) {
+     return CHyprColor{sc<uint64_t>(color)};
+ }
+@@ -152,8 +182,7 @@ void CHyprBar::onTouchUp(Event::SCallbackInfo& info, ITouch::SUpEvent e) {
+ 
+ void CHyprBar::onMouseMove(Vector2D coords) {
+     // ensure proper redraws of button icons on hover when using hardware cursors
+-    if (g_pGlobalState->config.iconOnHover->value())
+-        damageOnButtonHover();
++    damageOnButtonHover();
+ 
+     if (!m_bDragPending || m_bTouchEv || !validMapped(m_pWindow) || m_touchId != 0)
+         return;
+@@ -367,7 +396,34 @@ void CHyprBar::renderBarButtons(CBox* barBox, const float scale, const float a)
+                           scaledButtonSize};
+         buttonBox.round();
+ 
+-        g_pHyprOpenGL->renderRect(buttonBox, color, {.round = sc<int>(std::round(scaledButtonSize / 2.0)), .roundingPower = 2.F});
++        CHyprColor buttonColor_1 = configColor(bevelShadow);
++        buttonBox.y += 2;
++        buttonBox.h -= 5;
++        g_pHyprOpenGL->renderRect(buttonBox, buttonColor_1, {.round = 0, .roundingPower = 0.0F});
++
++        CHyprColor buttonColor_2 = configColor(bevelHighlight);
++        buttonBox.w -= 1;
++        buttonBox.h -= 1;
++        g_pHyprOpenGL->renderRect(buttonBox, buttonColor_2, {.round = 0, .roundingPower = 0.0F});
++
++        CHyprColor buttonColor_3 = configColor(bevelDark);
++        buttonBox.x += 1;
++        buttonBox.y += 1;
++        buttonBox.w -= 1;
++        buttonBox.h -= 1;
++        g_pHyprOpenGL->renderRect(buttonBox, buttonColor_3, {.round = 0, .roundingPower = 0.0F});
++
++        CHyprColor buttonColor_4 = configColor(bevelLight);
++        buttonBox.w -= 1;
++        buttonBox.h -= 1;
++        g_pHyprOpenGL->renderRect(buttonBox, buttonColor_4, {.round = 0, .roundingPower = 0.0F});
++
++        const bool hovered = m_iButtonHoverState & (1 << i);
++        buttonBox.x += 1;
++        buttonBox.y += 1;
++        buttonBox.w -= 1;
++        buttonBox.h -= 1;
++        g_pHyprOpenGL->renderRect(buttonBox, hovered ? configColor(buttonHover) : buttonColor_2, {.round = 0, .roundingPower = 0.0F});
+ 
+         offset += scaledButtonsPad + scaledButtonSize;
+     }
+@@ -550,7 +606,8 @@ void CHyprBar::renderPass(PHLMONITOR pMonitor, const float& a) {
+         glStencilFunc(GL_ALWAYS, 1, 0xFF);
+     }
+ 
+-    CBox textBox = {titleBarBox.x, titleBarBox.y, BARBUF.x, BARBUF.y};
++    int  totalOffset = 0;
++    CBox textBox     = {titleBarBox.x, titleBarBox.y, BARBUF.x, BARBUF.y};
+     if (ENABLETITLE && m_pTextTex) {
+         const auto BARPADDING       = g_pGlobalState->config.barPadding->value();
+         const auto BARBUTTONPADDING = g_pGlobalState->config.barButtonPadding->value();
+@@ -566,12 +623,67 @@ void CHyprBar::renderPass(PHLMONITOR pMonitor, const float& a) {
+         const auto scaledBarPadding  = BARPADDING * pMonitor->m_scale;
+         const auto xOffset           = ALIGN == "left" ? std::round(scaledBarPadding + (BUTTONSRIGHT ? 0 : scaledButtonsSize)) :
+                                                          std::round(((BARBUF.x - scaledBorderSize) / 2.0 - m_pTextTex->m_size.x / 2.0));
+-        const auto yOffset           = std::round((BARBUF.y - m_pTextTex->m_size.y) / 2.0);
+-        CBox       titleBox          = {textBox.x + xOffset, textBox.y + yOffset, m_pTextTex->m_size.x, m_pTextTex->m_size.y};
++        const auto yOffset           = std::round((BARBUF.y - m_pTextTex->m_size.y) / 2.0) - 2.0;
++        CBox       titleBox          = {textBox.x + xOffset + 4.0, textBox.y + yOffset, m_pTextTex->m_size.x, m_pTextTex->m_size.y};
++
++        CBox       textBar = {titleBarBox.x - 1, titleBarBox.y - 1, (m_pTextTex->m_size.x + 8 > 150.0 ? m_pTextTex->m_size.x + 8.0 : 150.0), titleBarBox.h};
++        textBar.w          = (textBar.w > titleBarBox.w - 55 ? m_pTextTex->m_size.x + 8.0 : textBar.w);
++        totalOffset        = textBar.w;
++        textBar.round();
++        if (textBar.w >= 8 && textBar.h >= 8) {
++            g_pHyprOpenGL->scissor(textBar);
++
++            CHyprColor textColor_1 = configColor(bevelShadow);
++            textBar.h -= 2;
++            g_pHyprOpenGL->renderRect(textBar, textColor_1, {.round = 0, .roundingPower = 0.0F});
++
++            CHyprColor textColor_2 = configColor(bevelHighlight);
++            textBar.w -= 1;
++            textBar.h -= 1;
++            g_pHyprOpenGL->renderRect(textBar, textColor_2, {.round = 0, .roundingPower = 0.0F});
++
++            CHyprColor textColor_3 = configColor(bevelDark);
++            textBar.x += 1;
++            textBar.y += 1;
++            textBar.w -= 1;
++            textBar.h -= 1;
++            g_pHyprOpenGL->renderRect(textBar, textColor_3, {.round = 0, .roundingPower = 0.0F});
++
++            CHyprColor textColor_4 = configColor(bevelLight);
++            textBar.w -= 1;
++            textBar.h -= 1;
++            g_pHyprOpenGL->renderRect(textBar, textColor_4, {.round = 0, .roundingPower = 0.0F});
++
++            textBar.x += 1;
++            textBar.y += 1;
++            textBar.w -= 1;
++            textBar.h -= 1;
++            g_pHyprOpenGL->renderRect(textBar, textColor_2, {.round = 0, .roundingPower = 0.0F});
++        }
+ 
+         g_pHyprOpenGL->renderTexture(m_pTextTex, titleBox, {.a = a});
+     }
+ 
++    CHyprColor gripColor_1  = configColor(bevelDark);
++    CHyprColor gripColor_2  = configColor(gripLight);
++    CBox       gripBarDecor = {titleBarBox.x + totalOffset + 10, textBox.y, titleBarBox.w - totalOffset - 78, 1};
++
++    if (gripBarDecor.w > 1) {
++        for (int i = 0; i < 3; i++) {
++            gripBarDecor.y += 4;
++            gripBarDecor.h = 2;
++            g_pHyprOpenGL->scissor(gripBarDecor);
++            g_pHyprOpenGL->renderRect(gripBarDecor, gripColor_1, {.round = 0, .roundingPower = 0});
++
++            gripBarDecor.y += 1;
++            gripBarDecor.h = 1;
++            gripBarDecor.x += 1;
++            g_pHyprOpenGL->scissor(gripBarDecor);
++            g_pHyprOpenGL->renderRect(gripBarDecor, gripColor_2, {.round = 0, .roundingPower = 0});
++            gripBarDecor.x -= 1;
++        }
++    }
++
+     renderBarButtons(&textBox, pMonitor->m_scale, a);
+     m_bButtonsDirty = false;
+ 
